@@ -1,151 +1,77 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, render_template
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from pyclustering.cluster.kmedoids import kmedoids
-import gower
-import os
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
 
-# Initialize Flask app
+# Load and preprocess the dataset
+file_path = "DmartSalesData.csv"
+df = pd.read_csv(file_path)
+
+# Drop rows with missing values in selected columns
+df = df.dropna(subset=['Total', 'gross income', 'Rating', 'Quantity'])
+
+# Prepare the data for clustering
+X = df[['Total', 'gross income', 'Rating', 'Quantity']].values
+
+# Standardize the data
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Apply DBSCAN
+dbscan = DBSCAN(eps=1.5, min_samples=10)
+dbscan_labels = dbscan.fit_predict(X_scaled)
+
+df['Cluster'] = dbscan_labels
+
+# Compute cluster descriptions
+cluster_descriptions = df.groupby('Cluster')[['Total', 'gross income', 'Rating', 'Quantity']].mean()
+
+# Flask app setup
 app = Flask(__name__)
 
-# Directories for saving files
-UPLOAD_DIR = "./uploads"
-PLOT_DIR = "./plots"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(PLOT_DIR, exist_ok=True)
+@app.route('/')
+def index():
+    return render_template('index.html', cluster=None, description=None, message=None, error=None)
 
-@app.route("/", methods=["GET", "POST"])
-def homepage():
-    """Render homepage and handle file upload and clustering."""
-    if request.method == "POST":
-        try:
-            # Get uploaded file
-            file = request.files["file"]
-            features = request.form["features"]
-            if not file or not features:
-                return "Please upload a file and specify features."
+@app.route('/get-cluster-description', methods=['POST'])
+def get_cluster_description():
+    try:
+        # Parse the input data
+        input_data = request.form
+        
+        # Check if any field is missing
+        total = input_data.get('Total')
+        gross_income = input_data.get('Gross Income')
+        rating = input_data.get('Rating')
+        quantity = input_data.get('Quantity')
 
-            # Save the file
-            file_path = os.path.join(UPLOAD_DIR, file.filename)
-            file.save(file_path)
+        if not total or not gross_income or not rating or not quantity:
+            return render_template('index.html', error="Please fill in all fields.")
 
-            # Load the dataset
-            df = pd.read_csv(file_path)
+        # Convert inputs to float
+        data_point = [
+            float(total),
+            float(gross_income),
+            float(rating),
+            float(quantity)
+        ]
 
-            # Extract selected features
-            selected_features = [feature.strip() for feature in features.split(",")]
-            if not all(feature in df.columns for feature in selected_features):
-                return "One or more selected features are not in the dataset."
+        # Scale the input data
+        data_point_scaled = scaler.transform([data_point])
 
-            # Compute Gower's distance
-            data = df[selected_features]
-            gower_matrix = gower.gower_matrix(data)
+        # Predict the cluster
+        cluster_label = dbscan.fit_predict(np.vstack([X_scaled, data_point_scaled]))[-1]
 
-            # Perform K-Medoids clustering with k=5
-            initial_medoids = list(range(5))  # First 5 points as initial medoids
-            kmedoids_instance = kmedoids(gower_matrix, initial_medoids, data_type="distance_matrix")
-            kmedoids_instance.process()
-            clusters_result = kmedoids_instance.get_clusters()
+        if cluster_label == -1:
+            return render_template('index.html', message="The data point belongs to noise.")
 
-            # Assign cluster labels to data
-            cluster_labels = np.zeros(len(df))
-            for idx, cluster in enumerate(clusters_result):
-                cluster_labels[cluster] = idx
-            df['Cluster'] = cluster_labels
+        # Get the cluster description
+        cluster_description = cluster_descriptions.loc[cluster_label].to_dict()
 
-            # Plot the clusters (if two features are selected)
-            if len(selected_features) == 2:
-                plot_path = os.path.join(PLOT_DIR, "cluster_plot.png")
-                plt.figure(figsize=(8, 6))
-                for cluster_idx, cluster_points in enumerate(clusters_result):
-                    cluster_data = data.iloc[cluster_points]
-                    plt.scatter(cluster_data[selected_features[0]], cluster_data[selected_features[1]], label=f"Cluster {cluster_idx}")
-                plt.title("K-Medoids Clustering")
-                plt.xlabel(selected_features[0])
-                plt.ylabel(selected_features[1])
-                plt.legend()
-                plt.savefig(plot_path)
-                plt.close()
-                return send_file(plot_path, mimetype="image/png", as_attachment=True)
+        return render_template('index.html', cluster=int(cluster_label), description=cluster_description)
+    except Exception as e:
+        return render_template('index.html', error=str(e))
 
-            # Save clustered data if more than 2 features
-            clustered_file = os.path.join(PLOT_DIR, "clustered_data.csv")
-            df.to_csv(clustered_file, index=False)
-            return send_file(clustered_file, mimetype="text/csv", as_attachment=True)
-
-        except Exception as e:
-            return f"An error occurred: {str(e)}"
-
-    # Render HTML form
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>K-Medoids Clustering</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                background-color: #f4f4f4;
-                margin: 0;
-                padding: 0;
-            }
-            .container {
-                width: 80%;
-                margin: 0 auto;
-                background: #fff;
-                padding: 20px;
-                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-                margin-top: 50px;
-            }
-            h1 {
-                text-align: center;
-                color: #333;
-            }
-            form {
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-            }
-            label {
-                font-weight: bold;
-            }
-            input[type="file"],
-            input[type="text"],
-            button {
-                padding: 10px;
-                font-size: 16px;
-                border: 1px solid #ccc;
-                border-radius: 5px;
-            }
-            button {
-                background-color: #28a745;
-                color: white;
-                cursor: pointer;
-            }
-            button:hover {
-                background-color: #218838;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>K-Medoids Clustering with Gower's Distance</h1>
-            <form method="post" enctype="multipart/form-data">
-                <label for="file">Upload CSV File:</label>
-                <input type="file" name="file" accept=".csv" required><br><br>
-                
-                <label for="features">Enter Feature Columns (comma-separated):</label>
-                <input type="text" name="features" placeholder="e.g., feature1,feature2" required><br><br>
-                
-                <button type="submit">Cluster</button>
-            </form>
-        </div>
-    </body>
-    </html>
-    """
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)

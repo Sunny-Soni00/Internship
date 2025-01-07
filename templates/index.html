@@ -3,31 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>K-Medoids Clustering</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>DBSCAN Cluster Description</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .error {
+            color: red;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>K-Medoids Clustering with Gower's Distance</h1>
-        {% if error %}
-            <p class="error">{{ error }}</p>
-        {% endif %}
-        {% if message %}
-            <p class="success">{{ message }}</p>
-        {% endif %}
-        <form method="post" enctype="multipart/form-data">
-            <label for="file">Upload CSV File:</label>
-            <input type="file" name="file" accept=".csv" required><br><br>
-            
-            <label for="features">Enter Feature Columns (comma-separated):</label>
-            <input type="text" name="features" placeholder="e.g., feature1,feature2" required><br><br>
-            
-            <button type="submit">Cluster</button>
-        </form>
-        {% if plot_url %}
-            <h2>Cluster Plot:</h2>
-            <img src="{{ plot_url }}" alt="Cluster Plot">
-        {% endif %}
+    <h1>DBSCAN Cluster Description</h1>
+    <form action="/get-cluster-description" method="post">
+        <label for="total">Total</label>
+        <input type="number" step="any" id="total" name="Total" required>
+
+        <label for="gross_income">Gross Income</label>
+        <input type="number" step="any" id="gross_income" name="Gross Income" required>
+
+        <label for="rating">Rating</label>
+        <input type="number" step="any" id="rating" name="Rating" required>
+
+        <label for="quantity">Quantity</label>
+        <input type="number" step="any" id="quantity" name="Quantity" required>
+
+        <button type="submit">Get Cluster Description</button>
+    </form>
+
+    {% if error %}
+    <div class="result error">
+        <strong>Error:</strong> {{ error }}
     </div>
+    {% endif %}
+
+    {% if message %}
+    <div class="result">
+        <strong>Message:</strong> {{ message }}
+    </div>
+    {% endif %}
+
+    {% if cluster is not none and description %}
+    <div class="result">
+        <h2>Cluster Details</h2>
+        <p><strong>Cluster:</strong> {{ cluster }}</p>
+        <h3>Description:</h3>
+        <ul>
+            {% for key, value in description.items() %}
+            <li><strong>{{ key }}:</strong> {{ value }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
 </body>
 </html>
