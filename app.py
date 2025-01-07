@@ -64,7 +64,7 @@ def get_cluster_description():
         cluster_label = dbscan.fit_predict(np.vstack([X_scaled, data_point_scaled]))[-1]
 
         if cluster_label == -1:
-            return render_template('index.html', message="The data point belongs to noise.")
+            return render_template('index.html', message="The data point is an anomaly.")
 
         # Get the cluster description
         cluster_description = cluster_descriptions.loc[cluster_label].to_dict()
